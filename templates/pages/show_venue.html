@@ -75,7 +75,19 @@
 	</div>
 </section>
 
+
+<section>
 <a href="/venues/{{ venue.id }}/edit"><button class="btn btn-primary btn-lg">Edit</button></a>
+<button type="submit" onclick="deleteVenue(this)" data-id="{{ venue.id }}" class="btn btn-danger btn-lg"
+        >Delete Venue &cross;</button>
+
+</section>
+
+
+<script>
+
+
+</script>
 
 {% endblock %}
 
