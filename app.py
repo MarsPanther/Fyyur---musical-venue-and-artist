@@ -4,6 +4,7 @@
 
 import json
 from operator import itemgetter
+import sys
 import dateutil.parser
 import babel
 from flask import Flask, render_template, request, \
@@ -90,13 +91,14 @@ class Show(db.Model):
                            default=datetime.utcnow)
 
     # Show -> Artist
-    # Show -> Venue
+
     artist_id = db.Column(db.Integer, db.ForeignKey(
         'Artist.id'), nullable=False)
+    # Show -> Venue
     venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'), nullable=False)
 
     def __repr__(self):
-        return '<Show {}{}>'.format(self.artist_id, self.venue_id)
+        return '<Show Artist ID:{}, Venue ID:{}>'.format(self.artist_id, self.venue_id)
 
 #----------------------------------------------------------------------------#
 # Filters.
@@ -130,33 +132,25 @@ def index():
 @app.route('/venues')
 def venues():
     data = []
+    now = datetime.now()
     venues = Venue.query.all()
-    cities_states = set()
+    city_state = set()
     for venue in venues:
-        cities_states.add((venue.city, venue.state))
+        city_state.add((venue.city, venue.state))
 
     # change unique set to a list
-    cities_states = list(cities_states)
+    city_state = list(city_state)
 
-    # sort by state and then city
-    cities_states.sort(key=itemgetter(1, 0))
-
-    for item in cities_states:
+    for item in city_state:
         # For this location, see if there are any venues there, and add if so
         venues_list = []
         for venue in venues:
-            if (venue.city == item[0]) and (venue.state == item[1]):
-                venue_shows = Show.query.filter_by(venue_id=venue.id).all()
-                num_upcoming = 0
-                for show in venue_shows:
-                    if show.start_time > datetime.now():
-                        num_upcoming += 1
-
-                venues_list.append({
-                    "id": venue.id,
-                    "name": venue.name,
-                    "num_upcoming_shows": num_upcoming
-                })
+            venue_shows = Show.query.filter_by(venue_id=venue.id).all()
+            venues_list.append({
+                "id": venue.id,
+                "name": venue.name,
+                "num_upcoming_shows": len(list(filter(lambda x: x.start_time > now, venue_shows)))
+            })
 
         data.append({
             "city": item[0],
@@ -170,20 +164,20 @@ def venues():
 def search_venues():
     search_term = request.form.get('search_term', '').strip()
     venues = Venue.query.filter(
-        Venue.name.ilike('%' + search_term + '%')).all()
+        Venue.name.ilike('%' + search_term + '%') |
+        Venue.state.ilike('%' + search_term + '%') |
+        Venue.city.ilike('%' + search_term + '%')
+    ).all()
+
     venue_list = []
+    now = datetime.now()
 
     for venue in venues:
         venue_shows = Show.query.filter_by(venue_id=venue.id).all()
-        num_upcoming = 0
-        for show in venue_shows:
-            if show.start_time > datetime.now():
-                num_upcoming += 1
-
         venue_list.append({
             "id": venue.id,
             "name": venue.name,
-            "num_upcoming_shows": num_upcoming
+            "num_upcoming_shows": len(list(filter(lambda x: x.start_time > now, venue_shows)))
         })
 
     response = {
@@ -191,16 +185,6 @@ def search_venues():
         "data": venue_list
     }
 
-    # seach for Hop should return "The Musical Hop".
-    # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
-    # response = {
-    #     "count": 1,
-    #     "data": [{
-    #         "id": 2,
-    #         "name": "The Dueling Pianos Bar",
-    #         "num_upcoming_shows": 0,
-    #     }]
-    # }
     return render_template('pages/search_venues.html', results=response, search_term=request.form.get('search_term', ''))
 
 
@@ -208,16 +192,17 @@ def search_venues():
 def show_venue(venue_id):
     # get by primary key
     venue = Venue.query.get(venue_id)
+
+    now = datetime.now()
     if venue is None:
         # redirect hopme for a wrongly typed link
-        return redirect(url_for('inex'))
+        return redirect(url_for('index'))
     else:
 
         past_shows = []
-        past_shows_count = 0
         upcoming_shows = []
-        upcoming_shows_count = 0
-        now = datetime.now()
+
+        
 
         for show in venue.shows:
             if show.start_time > now:
@@ -250,9 +235,9 @@ def show_venue(venue_id):
             "seeking_description": venue.seeking_description,
             "image_link": venue.image_link,
             "past_shows": past_shows,
-            "past_shows_count": past_shows_count,
+            "past_shows_count": len(past_shows),
             "upcoming_shows": upcoming_shows,
-            "upcoming_shows_count": upcoming_shows_count
+            "upcoming_shows_count": len(upcoming_shows)
         }
 
         return render_template('pages/show_venue.html', venue=data)
@@ -301,33 +286,21 @@ def create_venue_submission():
 
 @app.route('/venues/<venue_id>/delete', methods=['DELETE'])
 def delete_venue(venue_id):
-    venue = Venue.query.get(venue_id)
-    if venue is None:
-        return redirect(url_for('index'))
-    else:
-        error_on_delete = False
+    try:
+        venue = Venue.query.get(venue_id)
+        db.session.delete(venue)
+        db.session.commit()
+        flash("Venue " + venue.name + " was deleted successfully!")
+    except:
+        db.session.rollback()
+        print(sys.exc_info())
+        flash("Venue was not deleted successfully.")
+    finally:
+        db.session.close()
 
-        venue_name = venue.name
+    return redirect(url_for("index"))
 
-        try:
-            db.session.delete(venue)
-            db.session.commit()
-        except:
-            error_on_delete = True
-            db.session.rollback()
-        finally:
-            db.session.close()
 
-        if error_on_delete:
-            flash(f'An error occurred deleting venue {venue_name}.')
-            print("Error in delete_venue()")
-            abort(500)
-        else:
-
-            return jsonify({
-                'deleted': True,
-                'url': url_for('venues')
-            })
 
     # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
     # clicking that button delete it from the db then redirect the user to the homepage
@@ -338,38 +311,28 @@ def delete_venue(venue_id):
 
 @app.route('/artists')
 def artists():
-    artists = Artist.query.order_by(Artist.name).all()
-
-    data = []
-    for artist in artists:
-        data.append({
-            "id": artist.id,
-            "name": artist.name
-        })
-
-    return render_template('pages/artists.html', artists=data)
+    artists = db.session.query(Artist.id, Artist.name).all()
+    return render_template('pages/artists.html', artists=artists)
 
 
 @app.route('/artists/search', methods=['POST'])
 def search_artists():
-    search_word = request.form.get('search_term', '').strip()
+    search_term = request.form.get('search_term', '').strip()
     # seach for "A" should return "Guns N Petals", "Matt Quevado", and "The Wild Sax Band".
     # search for "band" should return "The Wild Sax Band".
     artists = Artist.query.filter(
-        Artist.name.ilike('%' + search_word + '%')).all()
+        Artist.name.ilike('%' + search_term + '%') |
+        Artist.city.ilike('%' + search_term + '%') |
+        Artist.state.ilike('%' + search_term + '%')
+    ).all()
     artist_list = []
-
+    now = datetime.now()
     for artist in artists:
         artist_shows = Show.query.filter_by(artist_id=artist.id).all()
-        num_upcoming = 0
-        for show in artist_shows:
-            if show.start_time > datetime.now():
-                num_upcoming += 1
-
         artist_list.append({
             "id": artist.id,
             "name": artist.name,
-            "num_upcoming_shows": num_upcoming
+            "num_upcoming_shows": len(list(filter(lambda x: x.start_time > now, artist_shows)))
         })
 
     response = {
@@ -680,7 +643,6 @@ def create_artist_submission():
             abort(500)
 
 
-
 @app.route('/artists/<artist_id>/delete', methods=['GET'])
 def delete_artist(artist_id):
     # Deletes a artist based on AJAX call from the artist page
@@ -747,7 +709,6 @@ def create_shows():
 def create_show_submission():
     # called to create new shows in the db, upon submitting new show listing form
 
-
     form = ShowForm()
 
     artist_id = form.artist_id.data.strip()
@@ -755,9 +716,10 @@ def create_show_submission():
     start_time = form.start_time.data
 
     error_in_insert = False
-    
+
     try:
-        new_show = Show(start_time=start_time, artist_id=artist_id, venue_id=venue_id)
+        new_show = Show(start_time=start_time,
+                        artist_id=artist_id, venue_id=venue_id)
         db.session.add(new_show)
         db.session.commit()
     except:
@@ -772,7 +734,7 @@ def create_show_submission():
         print("Error in create_show_submission()")
     else:
         flash('Show was successfully listed!')
-    
+
     return render_template('pages/home.html')
 
 
@@ -803,11 +765,4 @@ if not app.debug:
 
 # Default port:
 if __name__ == '__main__':
-    app.run()
-
-# Or specify port manually:
-'''
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-'''
+    app.run(host="0.0.0.0", port=3000)
