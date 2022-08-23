@@ -2,7 +2,6 @@
 # Imports
 #----------------------------------------------------------------------------#
 
-from models import Venue, Artist, Show
 import json
 from operator import itemgetter
 import sys
@@ -35,71 +34,7 @@ migrate = Migrate(app, db)
 # Models.
 #----------------------------------------------------------------------------#
 
-
-class Venue(db.Model):
-    """ Venue Model """
-    __tablename__ = 'Venue'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(), nullable=False)
-    city = db.Column(db.String(120), nullable=False)
-    state = db.Column(db.String(120), nullable=False)
-    address = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(120))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(500))
-    genres = db.Column(db.ARRAY(db.String(120)))
-    seeking_talent = db.Column(db.Boolean, default=False)
-    seeking_description = db.Column(db.String(800))
-    website = db.Column(db.String(500))
-
-    shows = db.relationship('Show', backref='Venue',
-                            lazy=True, cascade='all, delete-orphan')
-
-    def __repr__(self):
-        return '<Venue {}>'.format(self.name)
-
-
-class Artist(db.Model):
-    """ Artist Model"""
-    __tablename__ = 'Artist'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(), nullable=False)
-    city = db.Column(db.String(120), nullable=False)
-    state = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(120), nullable=False)
-    genres = db.Column(db.ARRAY(db.String(120)))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(500))
-    website_link = db.Column(db.String(500))
-    seeking_venue = db.Column(db.Boolean, default=False, nullable=False)
-    seeking_description = db.Column(db.String(500), nullable=True)
-
-    # Artist -> Show
-    shows = db.relationship('Show', backref='Artist', lazy=True)
-
-    def __repr__(self):
-        return '<Artist {}>'.format(self.name)
-
-
-class Show(db.Model):
-    """ Show Model """
-    __tablename__ = 'Show'
-
-    id = db.Column(db.Integer, primary_key=True)
-    start_time = db.Column(db.DateTime, nullable=False,
-                           default=datetime.utcnow)
-
-    # Show -> Artist
-
-    artist_id = db.Column(db.Integer, db.ForeignKey(
-        'Artist.id'), nullable=False)
-    # Show -> Venue
-    venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'), nullable=False)
-
-    def __repr__(self):
-        return '<Show Artist ID:{}, Venue ID:{}>'.format(self.artist_id, self.venue_id)
+from models import *
 
 #----------------------------------------------------------------------------#
 # Filters.
@@ -291,20 +226,19 @@ def edit_venue(venue_id):
         # User typed in a URL that doesn't exist, redirect home
         return redirect(url_for('index'))
     else:
-        form = VenueForm(obj=venue)
+        form = VenueForm()
         venue = {
-            "id": venue_id,
-            "name": venue.name,
-            "genres": venue.genres,
-            "address": venue.address,
-            "city": venue.city,
-            "state": venue.state,
-            "phone": venue.phone,
-            "website": venue.website,
-            "facebook_link": venue.facebook_link,
-            "seeking_talent": venue.seeking_talent,
-            "seeking_description": venue.seeking_description,
-            "image_link": venue.image_link
+            form.name.data : venue.name,
+            form.genres.data : venue.genres,
+            form.address.data: venue.address,
+            form.city.data: venue.city,
+            form.state.data: venue.state,
+            form.phone.data: venue.phone,
+            form.website_link.data  : venue.website_link,
+            form.facebook_link.data: venue.facebook_link,
+            form. seeking_talent.data: venue.seeking_talent,
+            form.seeking_description.data: venue.seeking_description,
+            form.image_link.data: venue.image_link
         }
 
     return render_template('forms/edit_venue.html', form=form, venue=venue)
@@ -314,18 +248,19 @@ def edit_venue(venue_id):
 def edit_venue_submission(venue_id):
 
     # venue record with ID <venue_id> using the new attributes
-    form = VenueForm()
-    name = form.name.data.strip()
-    city = form.city.data.strip()
-    state = form.state.data
-    address = form.address.data.strip()
-    phone = form.phone.data
-    genres = form.genres.data
-    seeking_talent = True if form.seeking_talent.data == 'Yes' else False
-    seeking_description = form.seeking_description.data.strip()
-    image_link = form.image_link.data.strip()
-    website = form.website.data.strip()
-    facebook_link = form.facebook_link.data.strip()
+    form = VenueForm(request.form)
+
+    name = request.form['name']
+    city = request.form['city']
+    state = request.form['state']    
+    address = request.form['address']
+    phone = request.form['phone']
+    genres = request.form['genres']
+    seeking_talent = True if request.form['seeking_talent'] == 'Yes' else False
+    seeking_description = request.form['seeking_description']
+    image_link = request.form['image_link']
+    website_link = request.form['website_link']
+    facebook_link = request.form['facebook_link']
 
     if not form.validate():
         flash(form.errors)
@@ -350,7 +285,7 @@ def edit_venue_submission(venue_id):
             venue.seeking_talent = seeking_talent
             venue.seeking_description = seeking_description
             venue.image_link = image_link
-            venue.website = website
+            venue.website_link = website_link
             venue.facebook_link = facebook_link
 
             db.session.commit()
@@ -378,7 +313,7 @@ def delete_venue(venue_id):
     try:
         venue = Venue.query.get(venue_id)
         db.session.delete(venue)
-        db.session.commit()
+        db.session.commit() 
         flash("Venue " + venue.name + " was deleted successfully!")
     except:
         db.session.rollback()
@@ -747,4 +682,5 @@ if not app.debug:
 
 # Default port:
 if __name__ == '__main__':
+    app.debug = True
     app.run(host="0.0.0.0", port=3000)
