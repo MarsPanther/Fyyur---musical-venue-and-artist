@@ -11,4 +11,7 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 
 # IMPLEMENT DATABASE URL
+# to run inside the udacity machine change the configeration
+# SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:password@localhost:5432/fyyur'
+
 SQLALCHEMY_DATABASE_URI = 'postgresql://zach:password@localhost:5432/fyyur'
